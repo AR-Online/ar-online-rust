@@ -1,7 +1,7 @@
 # AR Online — SDK Rust
 
 [![CI](https://github.com/AR-Online/ar-online-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/AR-Online/ar-online-rust/actions/workflows/ci.yml)
-[![Rust](https://img.shields.io/badge/rust-1.79%2B-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 [![Edition](https://img.shields.io/badge/edition-2021-blue.svg)](https://doc.rust-lang.org/edition-guide/rust-2021/index.html)
 [![Cobertura](https://img.shields.io/badge/cobertura-96.9%25-success.svg)](#-desenvolvimento)
 [![unsafe](https://img.shields.io/badge/unsafe-forbid-success.svg)](#-o-que-ele-resolve)
@@ -28,7 +28,7 @@ Cliente oficial da API do AR Online para Rust. Você não monta URL, não escrev
 cargo add aronline-sdk
 ```
 
-Rust 1.79 ou mais novo. A crate se chama `aronline-sdk` no registro, mas a **lib** se chama `aronline`.
+Rust 1.85 ou mais novo. A crate se chama `aronline-sdk` no registro, mas a **lib** se chama `aronline`.
 
 ### Primeira chamada
 
@@ -180,7 +180,7 @@ Os doctests não são enfeite: os exemplos de `lib.rs` e `client.rs` **compilam 
 
 Os testes sobem um `TcpListener` **de verdade numa porta livre** e falam HTTP com ele. Não há dublê, e o servidor de mentira é `std` pura — um SDK que arrasta servidor de teste para dentro do `Cargo.toml` cobra esse custo de todo mundo que compila a árvore.
 
-O CI também compila na versão mínima (1.79): `rust-version` no `Cargo.toml` é promessa, e sem conferir é promessa que quebra na máquina do parceiro, não na nossa.
+O CI também compila na versão mínima (1.85): `rust-version` no `Cargo.toml` é promessa, e sem conferir é promessa que quebra na máquina do parceiro, não na nossa.
 
 ## 📚 Documentação
 

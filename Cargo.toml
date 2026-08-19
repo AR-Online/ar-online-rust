@@ -2,7 +2,10 @@
 name = "aronline-sdk"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.79"
+# 1.85, e nao 1.79: o `ureq-proto` (via ureq 3) exige edition2024, que so
+# existe a partir do Cargo 1.85. Prometer 1.79 era promessa que o CI da
+# versao minima derrubou na primeira execucao.
+rust-version = "1.85"
 description = "SDK oficial da API do AR Online (/v3)"
 authors = ["AR ONLINE TECNOLOGIA LTDA"]
 license = "Apache-2.0"

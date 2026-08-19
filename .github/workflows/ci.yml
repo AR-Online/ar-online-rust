@@ -57,12 +57,12 @@ jobs:
         run: cargo test --doc
 
   msrv:
-    name: Compila na versão mínima (1.79)
+    name: Compila na versão mínima (1.85)
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@1.79
+      - uses: dtolnay/rust-toolchain@1.85
       - uses: Swatinem/rust-cache@v2
 
       # rust-version no Cargo.toml é promessa; sem este job, é promessa que
@@ -89,6 +89,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Biblioteca não versiona Cargo.lock, e o audit-check precisa de um.
+      # Gerar aqui audita o que um parceiro resolveria hoje — que é o que
+      # interessa — em vez de um lock congelado no repositório.
+      - run: cargo generate-lockfile
 
       # Sem allow_failure: vulnerabilidade conhecida reprova. É a mesma regra
       # do portão da API — um aviso que não reprova é um aviso que ninguém lê.

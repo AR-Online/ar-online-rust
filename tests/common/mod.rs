@@ -79,9 +79,7 @@ impl FakeApi {
                 let Ok(stream) = stream else { break };
                 let current = thread_reply.lock().expect("reply envenenado").clone();
 
-                if let Some(seen) = serve(stream, &current) {
-                    *thread_received.lock().expect("received envenenado") = Some(seen);
-                }
+                serve(stream, &current, &thread_received);
             }
         });
 
@@ -163,7 +161,16 @@ impl FakeApi {
     }
 }
 
-fn serve(mut stream: TcpStream, reply: &Reply) -> Option<Received> {
+// O `received` é guardado ANTES de a resposta sair. Fazer o contrário abre uma
+// corrida real: o cliente termina de ler a resposta e o teste consulta
+// `received()` enquanto esta thread ainda não guardou nada — o que dá
+// "nenhuma requisição chegou" num teste que funcionou. Foi assim que a suíte
+// ficou instável no CI, falhando um teste diferente a cada execução.
+fn serve(
+    mut stream: TcpStream,
+    reply: &Reply,
+    received: &Arc<Mutex<Option<Received>>>,
+) -> Option<()> {
     let mut reader = BufReader::new(stream.try_clone().ok()?);
     let mut line = String::new();
 
@@ -192,6 +199,8 @@ fn serve(mut stream: TcpStream, reply: &Reply) -> Option<Received> {
         }
     }
 
+    *received.lock().expect("received envenenado") = Some(seen);
+
     let mut response = format!(
         "HTTP/1.1 {} X\r\nContent-Type: {}\r\nContent-Length: {}\r\nX-Request-Id: req-do-cabecalho\r\nConnection: close\r\n",
         reply.status,
@@ -209,7 +218,7 @@ fn serve(mut stream: TcpStream, reply: &Reply) -> Option<Received> {
     stream.write_all(response.as_bytes()).ok()?;
     stream.flush().ok()?;
 
-    Some(seen)
+    Some(())
 }
 
 /// Extrai a recusa, ou reprova o teste dizendo o que veio no lugar.
