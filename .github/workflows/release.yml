@@ -1,0 +1,72 @@
+name: Publicar
+
+# Dispara na tag. A tag é a decisão de publicar — não o merge, não o horário.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    name: crates.io (Trusted Publishing)
+    runs-on: ubuntu-latest
+
+    # O ambiente é onde se prende a regra no crates.io: o publisher confiável
+    # é declarado como "este repositório, este workflow, este ambiente". Sem
+    # ele, qualquer workflow do repositório poderia publicar.
+    environment:
+      name: crates-io
+      url: https://crates.io/crates/aronline-sdk
+
+    permissions:
+      # O token OIDC que substitui o CARGO_REGISTRY_TOKEN. Não existe segredo
+      # de API aqui: é isso que Trusted Publishing significa — o crates.io
+      # confia na identidade do runner, não numa chave que alguém colou no
+      # repositório e esqueceu.
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Publicar sem passar pelo portão é publicar no escuro. O CI já roda
+      # isto em push e PR; aqui roda de novo porque a tag pode apontar para um
+      # commit que ninguém abriu em PR.
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test --all-targets
+      - run: cargo test --doc
+
+      # A versão da crate tem de ser a da tag. Sem esta conferência, `v0.2.0`
+      # publicaria 0.1.0 e o registro passaria a mentir sobre o que é cada
+      # versão — e no crates.io versão publicada não se apaga.
+      - name: A versão da crate é a da tag
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version=$(cargo metadata --no-deps --format-version 1 \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')
+
+          echo "tag=$tag  Cargo.toml=$version"
+
+          if [ "$tag" != "$version" ]; then
+            echo "a tag diz $tag e o Cargo.toml diz $version"
+            exit 1
+          fi
+
+      # Troca o OIDC do runner por um token temporário do crates.io, que expira
+      # em minutos. É o passo que dispensa guardar CARGO_REGISTRY_TOKEN.
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
+      - run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
