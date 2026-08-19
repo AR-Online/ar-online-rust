@@ -1,5 +1,8 @@
 # AR Online — SDK Rust
 
+[![CI](https://github.com/AR-Online/ar-online-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/AR-Online/ar-online-rust/actions/workflows/ci.yml)
+[![Licença: Apache 2.0](https://img.shields.io/badge/licen%C3%A7a-Apache%202.0-blue.svg)](LICENSE)
+
 Cliente oficial da API do AR Online para Rust.
 
 Você não monta URL, não escreve cabeçalho, não desembrulha envelope e não lê
@@ -188,6 +191,9 @@ linguagem, ou depurando o que passou no fio — encontra em
 | `cargo test --all-targets && cargo test --doc` | testes e os exemplos deste README |
 | `cargo llvm-cov --fail-under-lines 95` | cobertura mínima de **95%** |
 | `cargo audit` | vulnerabilidade conhecida em dependência |
+
+Hoje: **29 testes** contando os 2 doctests (os exemplos deste README compilam
+de verdade), com 96,9% de cobertura.
 
 Os testes sobem um `TcpListener` de verdade numa porta livre e falam HTTP com
 ele. Não há dublê: o que este SDK precisa acertar é justamente o fio. E o
