@@ -47,12 +47,12 @@ fn entrega_direto_quando_a_rota_nao_envelopa() {
     let api = FakeApi::start();
     api.answers(
         r#"{"refreshed_at":null,"last_load_at":null,"worst_lag_seconds":null,
-            "tables_tracked":46,"tables_never_loaded":2,"behind":[]}"#,
+            "sources_tracked":46,"sources_behind":0,"sources_not_loaded":2}"#,
     );
 
     let freshness = api.client().freshness.get().expect("não esperava erro");
 
-    assert_eq!(freshness.tables_tracked, 46);
+    assert_eq!(freshness.sources_tracked, 46);
     // Nulo, e não 0: "nenhuma tabela tem marca" não é "está tudo em dia".
     assert_eq!(freshness.worst_lag_seconds, None);
 }

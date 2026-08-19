@@ -140,16 +140,18 @@ fn freshness_decodifica() {
     let api = FakeApi::start();
     api.answers(
         r#"{"refreshed_at":"2026-08-18T11:42:03-03:00","last_load_at":"2026-08-18T11:40:00-03:00",
-            "worst_lag_seconds":34904,"tables_tracked":46,"tables_never_loaded":2,
-            "behind":[{"legacy":"geral.ger_voz","lag_seconds":34904}]}"#,
+            "worst_lag_seconds":34904,"sources_tracked":46,"sources_behind":3,
+            "sources_not_loaded":2}"#,
     );
 
     let freshness = api.client().freshness.get().expect("não esperava erro");
 
-    assert_eq!(freshness.tables_tracked, 46);
+    assert_eq!(freshness.sources_tracked, 46);
     assert_eq!(freshness.worst_lag_seconds, Some(34904));
-    assert_eq!(freshness.behind.len(), 1);
-    assert_eq!(freshness.behind[0].legacy, "geral.ger_voz");
+    assert_eq!(freshness.sources_behind, 3);
+    // Nunca carregada e contagem PROPRIA: o conserto de "a carga nao comecou"
+    // nao e o conserto de "esta atrasada".
+    assert_eq!(freshness.sources_not_loaded, 2);
     assert_eq!(api.received().path(), "/v3/freshness");
 }
 

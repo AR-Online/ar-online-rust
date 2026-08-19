@@ -39,7 +39,7 @@ pub use client::{Client, ClientBuilder};
 pub use error::{ApiError, ErrorDetail, Result};
 pub use http::{DEFAULT_BASE_URL, DEFAULT_TIMEOUT};
 pub use models::{
-    AllowlistEntry, BehindTable, Channel, Freshness, Tag, Template, TemplateVariable, VersionInfo,
+    AllowlistEntry, Channel, Freshness, Tag, Template, TemplateVariable, VersionInfo,
 };
 pub use resources::{Allowlist, FreshnessResource, Tags, Templates, VersionResource};
 

@@ -13,7 +13,7 @@ mod version;
 
 pub use allowlist::AllowlistEntry;
 pub use channel::Channel;
-pub use freshness::{BehindTable, Freshness};
+pub use freshness::Freshness;
 pub use tag::Tag;
 pub use template::{Template, TemplateVariable};
 pub use version::VersionInfo;

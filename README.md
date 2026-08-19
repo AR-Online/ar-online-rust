@@ -77,14 +77,18 @@ Também pessoal, pelo mesmo motivo.
 ```rust
 let frescor = client.freshness.get()?;
 
-if frescor.worst_lag_seconds.is_some_and(|lag| lag > 900) {
-    eprintln!("a carga está atrasada: {:?}", frescor.behind);
+if frescor.sources_behind > 0 {
+    eprintln!("{} de {} atrasadas", frescor.sources_behind, frescor.sources_tracked);
 }
 ```
 
 Responde a pergunta prática de quando uma consulta devolve menos do que você
 esperava: o defeito é da API, ou a carga está atrasada? Sem esse número as
 duas hipóteses parecem a mesma coisa.
+
+Ela responde em **contagens**, não numa lista de tabelas: "46 acompanhadas, 3
+atrasadas" responde "está fresco?"; quarenta e seis nomes de tabela é um
+relatório que ninguém lê na hora em que a pergunta é feita.
 
 Campo que a API responde `null` é `Option` aqui. `worst_lag_seconds` em `None`
 é "nenhuma tabela tem marca de leitura", que não é "está tudo em dia" — por
