@@ -2,11 +2,9 @@
 
 Cliente oficial da API do AR Online para Rust.
 
-> **Estado: em construção.** O que está pronto é o repositório — licença,
-> empacotamento e publicação. O cliente HTTP ainda não: hoje a crate exporta só
-> o endereço padrão e a versão. Enquanto isso, a API responde a qualquer
-> cliente HTTP — o contrato está abaixo e em
-> [docs.ar-online.com.br](https://docs.ar-online.com.br).
+Você não monta URL, não escreve cabeçalho, não desembrulha envelope e não lê
+status para saber se deu certo. Chama método, recebe struct tipada, e a falha
+chega como `ApiError` no `Err`.
 
 ## Instalação
 
@@ -14,109 +12,183 @@ Cliente oficial da API do AR Online para Rust.
 cargo add aronline-sdk
 ```
 
-Rust 1.79 ou mais novo.
+Rust 1.79 ou mais novo. A crate se chama `aronline-sdk` no registro, mas a
+**lib** se chama `aronline` — é assim que ela entra no seu código.
+
+## Começando
 
 ```rust
-use aronline::DEFAULT_BASE_URL;
-```
+use aronline::{Channel, Client};
 
-A crate se chama `aronline-sdk` no registro, mas a **lib** se chama `aronline`
-— é assim que ela entra no seu código.
+fn main() -> Result<(), aronline::ApiError> {
+    let client = Client::builder()
+        .token(std::env::var("AR_TOKEN").unwrap_or_default())
+        .build();
 
-## A API que este SDK fala
+    for template in client.templates.list(Some(Channel::WhatsApp))? {
+        println!("{} {}", template.name, template.variables.len());
+    }
 
-Só a **`/v3`**. As rotas `/v1` e `/v2` existem e continuam de pé, mas elas
-respondem **byte a byte** o que as APIs antigas respondiam, idiossincrasias
-incluídas — inclusive erro com status `200`. São espelhos para ninguém precisar
-migrar no mesmo dia, não contrato novo, e um cliente tipado que as
-"melhorasse" quebraria exatamente quem elas existem para não quebrar.
-
-### Endereço
-
-```
-https://v3.ar-online.com.br/v3/<recurso>
-```
-
-### Autenticação
-
-Token **JWT RS256** no cabeçalho:
-
-```
-Authorization: Bearer <token>
-```
-
-O token é emitido pelo emissor do AR Online — **a API não emite token**, ela
-só tem a chave pública e verifica. Dois tipos de identidade circulam:
-
-- **pessoa** — o token traz `sub`. Rotas pessoais (etiquetas, lista de
-  permitidos) respondem a este;
-- **integração** — sem `sub`, ligado à entidade. Serve para servidor a
-  servidor; nas rotas pessoais recebe `403` dizendo isso, e não uma lista
-  vazia (que leria como "você não tem nada").
-
-Cada rota exige uma permissão nominal, que vem na claim `permissions` do
-token — a tabela abaixo diz qual.
-
-### Formato das respostas
-
-Sucesso vem envelopado em `data`:
-
-```json
-{ "data": [{ "id": "…", "name": "…" }] }
-```
-
-Falha vem envelopada em `error`, com status HTTP de verdade:
-
-```json
-{
-  "error": {
-    "code": "not_found",
-    "message": "Modelo não encontrado.",
-    "request_id": "0f3a…"
-  }
+    Ok(())
 }
 ```
 
-O catálogo de códigos:
+O cliente é **síncrono**, e de propósito: um SDK não escolhe o executor
+assíncrono da aplicação que o instala. Se o seu programa é async, chame dentro
+de `spawn_blocking`.
 
-| status | `code` | quando |
-|---|---|---|
-| 400 | `invalid_request` | a requisição não pôde ser lida (inclui filtro desconhecido) |
-| 401 | `unauthenticated` | credencial ausente ou inválida |
-| 403 | `forbidden` | autenticado, sem permissão para a ação |
-| 404 | `not_found` | não existe — **ou** não é seu (responder 403 contaria que existe) |
-| 409 | `conflict` | conflito com o estado atual |
-| 422 | `business_rule` | recusado pela regra de negócio |
-| 429 | `rate_limited` | limite excedido — veja o cabeçalho `Retry-After` |
-| 503 | `unavailable` | indisponível no momento — veja `Retry-After` |
-| 500 | `internal_error` | falha nossa |
+O token é emitido pelo AR Online. Se você ainda não tem o seu, fale com o
+suporte — a API só verifica token, ela não emite.
 
-Toda resposta, com erro ou sem, traz `X-Request-Id`. É o `request_id` do corpo
-e o primeiro dado que o suporte pede.
+## O que dá para fazer
 
-### O que a /v3 responde hoje
+### Modelos
 
-| rota | permissão | responde |
-|---|---|---|
-| `GET /v3/templates` | `templates:read` | os modelos que a sua identidade alcança |
-| `GET /v3/templates/{id}` | `templates:read` | um modelo pelo uuid público |
-| `GET /v3/tags` | `tags:read` | as suas etiquetas (token de pessoa) |
-| `GET /v3/tags/{id}` | `tags:read` | uma etiqueta sua |
-| `GET /v3/allowlist` | `allowlist:read` | os destinatários permitidos (token de pessoa) |
-| `GET /v3/freshness` | `freshness:read` | há quanto tempo a cópia dos dados foi atualizada |
-| `GET /v3/version` | — | versão da API, migration mínima e ambiente (rota aberta) |
+```rust
+let todos = client.templates.list(None)?;
+let do_whatsapp = client.templates.list(Some(Channel::WhatsApp))?;
+let um = client.templates.get("9b2f-uuid")?;
+```
 
-A superfície está crescendo. O documento OpenAPI em
-`https://v3.ar-online.com.br/docs/openapi.json` é sempre a lista completa do
-que está no ar.
+`Channel` é um enum: `Email`, `Sms`, `WhatsApp`, `Voice` e `Letter`. Valor
+fora da lista não compila. `Channel::ALL` tem a lista inteira.
+
+### Etiquetas
+
+```rust
+let etiquetas = client.tags.list()?;
+let uma = client.tags.get("12")?;
+```
+
+Etiqueta é **pessoal**: esses métodos respondem às etiquetas de quem está no
+token. Token de integração recebe `403` dizendo isso, em vez de uma lista
+vazia — que leria como "você não tem nenhuma".
+
+### Lista de permitidos
+
+```rust
+let permitidos = client.allowlist.list()?;
+```
+
+Também pessoal, pelo mesmo motivo.
+
+### Frescor dos dados
+
+```rust
+let frescor = client.freshness.get()?;
+
+if frescor.worst_lag_seconds.is_some_and(|lag| lag > 900) {
+    eprintln!("a carga está atrasada: {:?}", frescor.behind);
+}
+```
+
+Responde a pergunta prática de quando uma consulta devolve menos do que você
+esperava: o defeito é da API, ou a carga está atrasada? Sem esse número as
+duas hipóteses parecem a mesma coisa.
+
+Campo que a API responde `null` é `Option` aqui. `worst_lag_seconds` em `None`
+é "nenhuma tabela tem marca de leitura", que não é "está tudo em dia" — por
+isso não vira `0`.
+
+### Versão
+
+```rust
+let info = client.version.get()?;
+println!("{} {}", info.version, info.environment);
+```
+
+O único método que funciona **sem token** — é rota aberta. É o primeiro dado
+que o suporte pede.
+
+## Quando dá errado
+
+Toda recusa da API vem como `Err(ApiError)`.
+
+```rust
+match client.templates.get("nao-existe") {
+    Ok(template) => println!("{}", template.name),
+    Err(failure) => {
+        eprintln!("{}", failure.code);            // "not_found"
+        eprintln!("{}", failure.status);          // 404
+        eprintln!("{:?}", failure.request_id);    // o número que o suporte pede
+    }
+}
+```
+
+O que vem em `ApiError`:
+
+| campo | o que é |
+|---|---|
+| `status` | o status HTTP (`0` quando a API nem foi alcançada) |
+| `code` | o código do catálogo: `not_found`, `forbidden`, `rate_limited`, … |
+| `message` | a mensagem da API, em pt-BR |
+| `request_id` | identifica a chamada nos nossos registros — **sempre informe num chamado** |
+| `field` | o campo recusado, quando a recusa é sobre um |
+| `details` | uma entrada por campo, em erro de validação |
+| `retry_after_seconds` | quantos segundos esperar, em `429` e `503` |
+| `is_retryable()` | `true` em `429` e `503` |
+
+Repetir a chamada é decisão sua — o SDK não repete sozinho.
+
+Rede fora do ar e resposta que não é JSON (um proxy respondendo no lugar da
+API) também chegam como `ApiError`, com `code` `unreachable` e
+`invalid_response`. Você tem um tipo só para tratar, e ele implementa
+`std::error::Error` — então o `?` funciona com `anyhow`, `eyre` e o que você
+já usa.
+
+## Configuração
+
+```rust
+Client::builder()
+    .token("…")                             // opcional: sem ele, só version funciona
+    .base_url("https://v3.ar-online.com.br") // padrão; troque para homologação
+    .timeout(Duration::from_secs(30))       // padrão
+    .build()
+```
+
+`Client::builder().build()` já é utilizável: aponta para produção sem
+credencial, que é o suficiente para `version.get()`.
+
+## Dependências
+
+Três, e é a única das cinco linguagens que carrega alguma — a `std` não tem
+HTTP nem JSON:
+
+| crate | por quê |
+|---|---|
+| `ureq` (rustls) | HTTP **síncrono**, sem arrastar runtime assíncrono junto |
+| `serde` + `serde_json` | desserialização |
+
+## Escopo
+
+Este SDK fala **só a `/v3`**. As rotas `/v1` e `/v2` continuam de pé, mas elas
+respondem byte a byte o que as APIs antigas respondiam, idiossincrasias
+incluídas — inclusive erro com status `200`. São espelhos para ninguém
+precisar migrar no mesmo dia, e um cliente tipado que as "melhorasse"
+quebraria exatamente quem elas protegem.
+
+A superfície `/v3` é só de leitura hoje. Escrita entra nos cinco SDKs na mesma
+leva em que entrar na API.
+
+Quem precisa do contrato HTTP cru — porque está escrevendo um cliente em outra
+linguagem, ou depurando o que passou no fio — encontra em
+[docs.ar-online.com.br](https://docs.ar-online.com.br).
 
 ## Desenvolvimento
 
-```bash
-cargo fmt --check
-cargo clippy --all-targets
-cargo test
-```
+| comando | o que cobra |
+|---|---|
+| `cargo fmt --check` | formato |
+| `cargo clippy --all-targets -- -D warnings` | clippy com `pedantic`, e `unwrap`/`expect`/`panic` proibidos no `src/` |
+| `codespell` | ortografia |
+| `cargo test --all-targets && cargo test --doc` | testes e os exemplos deste README |
+| `cargo llvm-cov --fail-under-lines 95` | cobertura mínima de **95%** |
+| `cargo audit` | vulnerabilidade conhecida em dependência |
+
+Os testes sobem um `TcpListener` de verdade numa porta livre e falam HTTP com
+ele. Não há dublê: o que este SDK precisa acertar é justamente o fio. E o
+servidor de mentira é `std` puro — um SDK que arrasta servidor de teste para
+dentro do `Cargo.toml` cobra esse custo de todo mundo que compila a árvore.
 
 ## Licença
 
