@@ -5,7 +5,7 @@
 //! that "improved" them would break the callers they exist to keep working.
 
 /// Where /v3 lives. Override it to point at staging or at a local process.
-pub const DEFAULT_BASE_URL: &str = "https://api.aronline.com.br";
+pub const DEFAULT_BASE_URL: &str = "https://v3.ar-online.com.br";
 
 /// This crate's version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
