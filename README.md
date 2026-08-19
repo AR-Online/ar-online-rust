@@ -184,6 +184,7 @@ O CI também compila na versão mínima (1.85): `rust-version` no `Cargo.toml` �
 
 ## 📚 Documentação
 
+- [CHANGELOG](CHANGELOG.md) — o que mudou em cada versão
 - [Documentação da API](https://docs.ar-online.com.br) — o contrato HTTP cru
 - [docs.rs](https://docs.rs/aronline-sdk) — a referência da crate
 - `https://v3.ar-online.com.br/docs/openapi.json` — sempre a lista completa do que está no ar
