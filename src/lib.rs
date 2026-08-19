@@ -17,9 +17,14 @@
 //! # }
 //! ```
 //!
-//! The SDK speaks the /v3 surface only. The /v1 and /v2 mirrors answer the old
-//! contracts byte for byte -- idiosyncrasies included -- and a typed client
-//! that "improved" them would break the callers they exist to keep working.
+//! Sending, status and proofs live on the old gateway, and the SDK speaks that
+//! too -- see [`legacy`], reached through [`Client::legacy`]. As /v3 grows an
+//! equivalent for a route, the legacy function swaps its transport without
+//! changing signature, so migrating is an update, not a rewrite.
+//!
+//! The /v1 and /v2 mirrors are a different matter: they answer the old
+//! contracts byte for byte for callers who cannot move yet, and no SDK covers
+//! them.
 
 // `ApiError` is past clippy's 128-byte threshold for an Err variant, and it
 // stays that way. What makes it big is what makes it useful: the catalog code,
@@ -32,6 +37,7 @@
 mod client;
 mod error;
 mod http;
+pub mod legacy;
 mod models;
 mod resources;
 

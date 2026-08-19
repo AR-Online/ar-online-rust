@@ -8,12 +8,6 @@
 
 Cliente oficial da API da AR Online para Rust.
 
-> **Status:** este SDK cobre as consultas da API /v3, que ainda não está
-> publicada — o endereço `v3.ar-online.com.br` entra no ar junto com ela. O
-> envio de notificações em produção é feito hoje pela API legada, que ainda não
-> está neste SDK. Fale com o suporte antes de planejar uma integração em cima
-> dele.
-
 ## Sobre a AR Online
 
 A AR Online é uma plataforma brasileira de notificação eletrônica com validade
@@ -57,6 +51,15 @@ A crate se chama `aronline-sdk` no registro, e a lib se chama `aronline`.
 
 ## Autenticação
 
+A plataforma tem duas superfícies de API, e cada uma usa uma credencial
+diferente. O SDK aceita as duas no mesmo cliente e envia cada uma no formato que
+a sua superfície espera.
+
+### Token do gateway (API legada)
+
+É a credencial que você usa para enviar notificações e consultar status hoje.
+Solicite em <suporte@ar-online.com.br>. No SDK, ela vai em `legacy_token`.
+
 ### Token da API /v3
 
 Solicite em <suporte@ar-online.com.br>. O token fica preso a uma entidade da sua
@@ -67,25 +70,55 @@ O token tem prazo de validade. Token ausente, expirado ou revogado responde
 `401`; se um token vazar, peça a revogação e ele deixa de ser aceito na chamada
 seguinte.
 
-Quando a /v3 for publicada, a emissão passa a ser por conta própria, na tela
-*Gerar Token* da documentação, com o mesmo usuário e senha do portal.
+> **A /v3 ainda não está publicada.** O endereço `v3.ar-online.com.br`, que é o
+> padrão do SDK para essa superfície, entra no ar junto com ela — assim como a
+> emissão de token por conta própria, na tela *Gerar Token* da documentação, com
+> o mesmo usuário e senha do portal. Até lá, a parte da /v3 deste SDK serve para
+> desenvolver contra um ambiente de teste, e é o `client.legacy()` que fala com
+> a API em produção.
 
 ## Primeiros passos
 
-```rust
-use aronline::{Channel, Client};
+O envio de notificações é feito hoje pela API legada, exposta no SDK em
+`client.legacy()`:
 
-fn main() -> Result<(), aronline::ApiError> {
+```rust
+use aronline::legacy::{CanalSms, EnvioRequest};
+use aronline::Client;
+
+fn main() -> Result<(), aronline::legacy::LegacyApiError> {
     let client = Client::builder()
-        .token(std::env::var("AR_TOKEN").unwrap_or_default())
+        .legacy_token(std::env::var("AR_GW_TOKEN").unwrap_or_default())
         .build();
 
-    for template in client.templates.list(Some(Channel::WhatsApp))? {
-        println!("{} {}", template.name, template.variables.len());
-    }
+    let envio = EnvioRequest {
+        to: Some("joao@exemplo.com".to_owned()),
+        sms: Some(CanalSms {
+            number: Some("11999998888".to_owned()),
+            ..CanalSms::default()
+        }),
+        ..EnvioRequest::new(
+            "João da Silva",
+            "Notificação de vencimento",
+            "<p>Prezado João, identificamos uma pendência em seu contrato.</p>",
+        )
+    };
+
+    let sent = client.legacy().send(&envio)?;
+
+    println!("notificação aceita: {}", sent.id_email);
 
     Ok(())
 }
+```
+
+Guarde o `id_email`: é com ele que você consulta o status de qualquer canal e
+baixa os comprovantes.
+
+```rust
+let status = client.legacy().status().email(&sent.id_email)?;
+
+println!("{}", status.description); // "Processado", "Enviado", "Entregue", "Lido"
 ```
 
 O cliente é **síncrono**, para não impor um executor assíncrono à aplicação que
@@ -93,7 +126,78 @@ o instala. Se o seu programa é async, chame dentro de `spawn_blocking`.
 
 ## Referência
 
-Este SDK cobre hoje as consultas da API /v3.
+### Envio e acompanhamento (`client.legacy()`)
+
+| método | o que faz |
+|---|---|
+| `legacy().send(&envio)` | envia a notificação em um ou mais canais |
+| `legacy().status().email(id)` | status do AR-Email |
+| `legacy().status().sms(id)` | status do AR-SMS |
+| `legacy().status().whatsapp(id)` | status do AR-WhatsApp |
+| `legacy().status().voz(id)` | status do AR-Voz |
+| `legacy().status().carta(id)` | status do AR-Cartas, com o rastreio dos Correios |
+| `legacy().status().full(id)` | dados de perícia de todos os canais numa chamada |
+| `legacy().sending_proof(id)` | comprovante de envio em PDF |
+| `legacy().laudo(id)` | laudo pericial em PDF |
+| `legacy().finalizar_regua(id)` | encerra a régua de notificação do envio |
+| `legacy().templates().list(tipo)` | lista os modelos da sua entidade |
+| `legacy().templates().get(id)` | busca um modelo |
+| `legacy().templates().update(id, &campos)` | edita nome e compartilhamento |
+| `legacy().templates().deactivate(id)` | desativa um modelo |
+| `legacy().templates().set_status(id, ativo)` | ativa ou desativa um modelo |
+
+Envio multicanal: cada canal é um bloco opcional no corpo.
+
+```rust
+use aronline::legacy::{Anexo, CanalCarta, CanalSms, CanalVoz, CanalWhatsapp, EnvioRequest, SmsTypeSend};
+
+client.legacy().send(&EnvioRequest {
+    to: Some("joao@exemplo.com".to_owned()),
+    // sua referência, devolvida na consulta de status
+    custom_id: Some("contrato-4471".to_owned()),
+    attachments: vec![Anexo { name: "contrato.pdf".to_owned(), base64: "…".to_owned() }],
+    sms: Some(CanalSms {
+        number: Some("11999998888".to_owned()),
+        // SomenteSeFalhar: só se o e-mail não for entregue; Sempre: sempre
+        type_send: Some(SmsTypeSend::SomenteSeFalhar),
+        custom_message: Some("Você recebeu um AR-Email. Acesse: {SHORT_LINK}".to_owned()),
+    }),
+    whatsapp: Some(CanalWhatsapp { number: Some("11999998888".to_owned()), ..Default::default() }),
+    voz: Some(CanalVoz { number: Some("1133334444".to_owned()), ..Default::default() }),
+    carta: Some(CanalCarta { name: Some("João da Silva".to_owned()), ..Default::default() }),
+    ..EnvioRequest::new("João da Silva", "Notificação de vencimento", "<p>Conteúdo.</p>")
+})?;
+```
+
+Comprovantes: o comprovante de envio chega em base64 dentro de um JSON e o SDK
+já o decodifica; o laudo pericial chega como PDF binário.
+
+```rust
+let comprovante = client.legacy().sending_proof(&id_email)?;
+
+match comprovante.pdf {
+    Some(bytes) => std::fs::write("comprovante.pdf", bytes)?,
+    // ainda sem status de entrega — pergunte de novo mais tarde
+    None => println!("{:?}", comprovante.message),
+}
+
+std::fs::write("laudo.pdf", client.legacy().laudo(&id_email)?)?;
+```
+
+Datas do legado são `String` no formato `"18/07/2026 01:01:32"`, sem fuso. O SDK
+não as converte para um tipo de data: o formato não nomeia um instante
+inequívoco, e converter significaria chutar um fuso.
+
+Campo que o gateway responde de quatro maneiras diferentes continua distinguível
+no tipo — `""`, `null`, `{}` e a chave que simplesmente não vem. As três
+primeiras viram `String`, `Option` e mapa vazio; a última é `LegacyField`, que
+tem três estados (`Missing`, `Null`, `Present`) justamente para você não
+confundir "veio nulo" com "não veio".
+
+### Consultas da API /v3 (`client.*`)
+
+A /v3 é a API nova, com contrato limpo e validação estrita. Hoje ela é somente
+de leitura.
 
 | método | o que faz | precisa de token |
 |---|---|---|
@@ -149,22 +253,13 @@ println!("{} {}", info.version, info.environment);
 É a única chamada que funciona sem token, útil para conferir a instalação antes
 de ter uma credencial.
 
-## Envio de notificações
-
-O envio, a consulta de status por canal e os comprovantes estão na API legada do
-gateway, que **ainda não está neste SDK** — hoje ela está disponível no
-[SDK TypeScript](https://github.com/AR-Online/ar-online-typescript) e chega aqui
-nas próximas versões.
-
-Enquanto isso, o contrato HTTP está documentado em
-<https://docs.ar-online.com.br>, e a credencial do gateway é emitida pelo
-suporte.
-
 ## Tratamento de erros
 
-Toda recusa vem como `Err(ApiError)`. Como `ApiError` implementa
-`std::error::Error`, o operador `?` funciona com `anyhow`, `eyre` e o que você já
-usa.
+Toda recusa vem como `Err`. As duas superfícies têm cada uma o seu tipo, e ambos
+implementam `std::error::Error`, então o operador `?` funciona com `anyhow`,
+`eyre` e o que você já usa.
+
+A /v3 devolve `ApiError`:
 
 ```rust
 match client.templates.get("nao-existe") {
@@ -190,6 +285,32 @@ match client.templates.get("nao-existe") {
 
 Erro de rede e resposta que não é JSON também chegam como `ApiError`.
 
+A área de legado devolve `LegacyApiError`, com os campos do contrato antigo:
+
+```rust
+use aronline::legacy::LegacyApiError;
+
+match client.legacy().templates().get("nao-existe") {
+    Ok(template) => println!("{}", template.nome),
+    Err(failure) => {
+        eprintln!("{}", failure.status);      // 404 — o código que vale
+        eprintln!("{}", failure.http_status); // 200 — o que o fio disse
+        eprintln!("{:?}", failure.body);      // o corpo cru, como chegou
+    }
+}
+```
+
+| campo | conteúdo |
+|---|---|
+| `status` | o código que vale, mesmo quando o HTTP respondeu 200 |
+| `http_status` | o status que veio no protocolo (`0` quando não houve chamada) |
+| `body` | o corpo da resposta, exatamente como chegou |
+| `body_json()` | esse mesmo corpo já desserializado, quando é JSON |
+
+O envelope `{ data, statusCode }` dos templates do gateway — que responde HTTP
+200 até em erro — é resolvido pelo SDK: o `403`, `404` ou `500` de dentro do
+corpo vira `Err`, e você não precisa ler status nenhum para saber se deu certo.
+
 O SDK não repete chamadas automaticamente, porque só quem chamou sabe se a
 operação pode acontecer duas vezes.
 
@@ -197,17 +318,58 @@ operação pode acontecer duas vezes.
 
 ```rust
 Client::builder()
-    .token("…")                              // opcional: sem ele, só version funciona
-    .base_url("https://v3.ar-online.com.br") // padrão
-    .timeout(Duration::from_secs(30))        // padrão
+    .token("…")                                       // credencial da /v3
+    .legacy_token("…")                                // credencial do gateway
+    .base_url("https://v3.ar-online.com.br")          // padrão
+    .legacy_base_url("https://api.ar-online.com.br")  // padrão
+    .timeout(Duration::from_secs(30))                 // padrão, vale para as duas
     .build()
 ```
+
+Cada credencial é opcional: informe só a da superfície que você vai usar. Os
+endereços podem ser trocados para apontar a um ambiente de teste, e são
+independentes um do outro. Chamada de legado num cliente sem `legacy_token`
+falha antes de sair da máquina, dizendo qual credencial falta.
 
 `Client::builder().build()` já é utilizável: aponta para produção sem
 credencial, o suficiente para `version.get()`.
 
 Campo que a API responde `null` é `Option`, para que ausência e zero não se
 confundam: "nenhuma fonte tem marca de leitura" não é "está tudo em dia".
+
+Os objetos da área de legado usam os nomes de campo **como o gateway os
+escreve**, só adaptados à convenção do Rust (`custom_id` para `customID`,
+`id_email` para `idEmail`, `nome`, `conteudo`, `laudo`, `regua`). O vocabulário
+antigo fica: traduzir criaria nomes que não existem em documentação nenhuma.
+
+## Webhooks
+
+Em vez de consultar o status repetidamente, você pode receber uma chamada `POST`
+a cada mudança. A configuração é feita com o suporte, que cadastra o seu endpoint
+e os parâmetros de autenticação. O SDK não recebe a requisição por você, mas
+exporta os tipos do payload:
+
+```rust
+use aronline::legacy::{WebhookPayloadV1, WebhookPayloadV2};
+```
+
+Veja <https://docs.ar-online.com.br/webhooks/visao-geral> para o fluxo completo,
+incluindo a política de retentativas.
+
+## As duas superfícies, e o caminho entre elas
+
+A **API legada** é a que está em produção hoje e concentra envio, status e
+comprovantes. A **/v3** é a API nova, para onde as funcionalidades estão sendo
+migradas aos poucos.
+
+Quando uma rota ganha equivalente na /v3, a função correspondente de
+`client.legacy()` passa a falar com a /v3 internamente, **sem mudar de
+assinatura**. Na prática, você migra atualizando a versão do crate, não
+reescrevendo a sua integração. Cada troca dessas é registrada no
+[CHANGELOG](CHANGELOG.md).
+
+Equivalências de hoje: a leitura de templates do gateway tem a /v3 em
+`client.templates`; envio, status e provas ainda não têm.
 
 ## Dependências
 
@@ -236,16 +398,19 @@ quem instalou.
 
 | métrica | valor |
 |---|---|
-| Testes | 29, sendo 2 doctests |
-| Cobertura de linhas | 96,9% |
+| Testes | 97, sendo 6 doctests |
+| Cobertura de linhas | 97,9% |
 | Dependências de produção | 3 |
 | `unsafe` | proibido na crate inteira |
 
-Os exemplos de `lib.rs` e `client.rs` compilam de verdade no CI como doctests,
-então documentação desatualizada reprova o build. Os testes sobem um
-`TcpListener` real em uma porta livre e falam HTTP com ele; o servidor de teste é
-`std` pura, para não cobrar o custo de compilar um servidor de teste de todo
-mundo que compila a árvore.
+Os exemplos da documentação compilam de verdade no CI como doctests, então
+documentação desatualizada reprova o build. Os testes sobem um `TcpListener` real
+em uma porta livre e falam HTTP com ele; o servidor de teste é `std` pura, para
+não cobrar o custo de compilar um servidor de teste de todo mundo que compila a
+árvore. A área de legado não trouxe dependência nova: o base64 do comprovante é
+decodificado à mão, em sessenta linhas, e de propósito **estrito** — um
+decodificador leniente devolveria bytes plausíveis para uma resposta que nunca
+foi um PDF.
 
 O CI também compila na versão mínima declarada (1.85), para que `rust-version` no
 `Cargo.toml` seja uma promessa conferida.
