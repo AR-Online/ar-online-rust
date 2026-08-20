@@ -1,6 +1,6 @@
 [package]
 name = "aronline-sdk"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 # 1.85, e nao 1.79: o `ureq-proto` (via ureq 3) exige edition2024, que so
 # existe a partir do Cargo 1.85. Prometer 1.79 era promessa que o CI da
